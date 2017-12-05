@@ -39,10 +39,12 @@ def process_img(payload):
     try:
         matches = matcher.knnMatch(rDES,qDES,k=2)
     except:
-        state = "Not enough query keypoints."
-        print(state)
+        state = "Matching Error: not enough query points."
         result.append(state)
         result.append(query_img)
+        t1 = time.process_time()
+        print(state,"Time to process:", t1-t0)
+        result.append((t1-t0))
         return result    
 
     # store all the good matches as per Lowe's ratio test.
@@ -57,8 +59,7 @@ def process_img(payload):
     good = sorted(good, key = lambda x:x.distance)
     
     if len(good)>MIN_MATCH_COUNT:
-        state = "Enough matches; object is propbably in view."
-        result.append(state)
+        state = "Enough matches: object is propbably in view."
         # extract location of points in both images
         src_pts = np.float32([ rKP[m.queryIdx].pt for m in good ]).reshape(-1,1,2)
         dst_pts = np.float32([ qKP[m.trainIdx].pt for m in good ]).reshape(-1,1,2)
@@ -73,25 +74,27 @@ def process_img(payload):
         
         try:
             dst = cv2.perspectiveTransform(pts,M)
-            print(h,w,pts,dst)
+            # draw the transformed image
+            result.append(state)
+            result.append(cv2.drawContours(query_img,[np.int32(dst)],-1,(255,0,0),6))
+            result.append(dst)
         except:
-            state = "Not enough query keypoints."
-            print(state)
+            state = "Error getting perspective transform."
             result.append(state)
             result.append(query_img)
-            return result  
+        finally:
+            t1 = time.process_time()
+            print(state,"Time to process:", t1-t0)
+            result.append((t1-t0))
 
-        # draw the transformed image
-        result.append(cv2.drawContours(query_img,[np.int32(dst)],-1,(255,0,0),6))
     else:
-        state = "Not enough matches; object is not in view or is not clear."
+        state = "Not enough matches: object is not in view or is not clear."
         result.append(state)
         result.append(query_img)
+        t1 = time.process_time()
+        print(state,"Time to process:", t1-t0)
+        result.append((t1-t0))
 
-
-    t1 = time.process_time()
-    print(state,"Time to process:", t1-t0)
-    result.append(("", (t1-t0)))
     return result
 
 
@@ -166,14 +169,24 @@ class testHTTPServer_RequestHandler(BaseHTTPRequestHandler):
             # Send headers
             self.send_header('Content-type','text/html')
             #self.send_header('Content-type','image/jpeg')
-            self.end_headers()
-            res = open('res.jpg', 'rb')
-
+            
             # Send message back to client
             # Write content as utf-8 data
-            self.wfile.write(bytes(final_img[0], "utf8"))
+            print(len(final_img))
+            if len(final_img)>3:
+                message = bytes(str(final_img[3])+ "\n" + np.array2string(final_img[2],precision=0,separator=','), "utf8")
+                print(str(message))
+                self.send_header('Content-length',str(len(message)))
+                self.end_headers()
+                
+                self.wfile.write(message)
+            else:
+                message = bytes(str(final_img[2])+ "\n" + final_img[0], "utf8")
+                self.send_header('Content-length',str(len(message)))
+                self.end_headers()
+                
+                self.wfile.write(message)
             #self.wfile.write(res.read())
-            res.close()
 
         else:
             print("Content-type is ", content_type,". Should be image.")
@@ -184,7 +197,6 @@ class testHTTPServer_RequestHandler(BaseHTTPRequestHandler):
             message = "Object not detected."
             # Write content as utf-8 data
             self.wfile.write(bytes(message, "utf8"))
-
 
         return
         #client.close()
@@ -205,7 +217,7 @@ def run():
 
 
 
-# In[ ]:
+# In[5]:
 
 
 run()
