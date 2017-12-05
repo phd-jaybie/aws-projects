@@ -19,7 +19,7 @@ import requests
 
 def process_img(payload):
     result = []
-    t0 = time.process_time()
+    t0 = time.clock()
     
     search_params = dict(checks = 20) # this is for the flann-based matcher
     MIN_MATCH_COUNT = 300 # very relaxed matching at 10 matches minimum
@@ -91,7 +91,7 @@ def process_img(payload):
         state = "Not enough matches: object is not in view or is not clear."
         result.append(state)
         result.append(query_img)
-        t1 = time.process_time()
+        t1 = time.clock()
         print(state,"Time to process:", t1-t0)
         result.append((t1-t0))
 
@@ -214,7 +214,6 @@ def run():
     httpd = HTTPServer(server_address, testHTTPServer_RequestHandler)
     print('running server...')
     httpd.serve_forever()
-
 
 
 # In[5]:
