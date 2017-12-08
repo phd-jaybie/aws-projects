@@ -12,28 +12,31 @@ import numpy as np
 import sys
 import time
 import requests
+import math
+
+
+search_params = dict(checks = 20) # this is for the flann-based matcher
+largest = {4032, 3024}
+detector = cv2.xfeatures2d.SIFT_create()
+FLANN_INDEX_KDTREE = 0
+index_params = dict(algorithm = FLANN_INDEX_KDTREE, tree = 5)
+matcher = cv2.FlannBasedMatcher(index_params, search_params)
+
+ref = "train.jpg"
+
+ref_img = cv2.imread(ref, 0)
+
+rKP, rDES = detector.detectAndCompute(ref_img, None)        
 
 
 # In[2]:
 
-
 def process_img(payload):
-    result = []
-    t0 = time.process_time()
-    
-    search_params = dict(checks = 20) # this is for the flann-based matcher
-    MIN_MATCH_COUNT = 300 # very relaxed matching at 10 matches minimum
-    detector = cv2.xfeatures2d.SIFT_create()
-    FLANN_INDEX_KDTREE = 0
-    index_params = dict(algorithm = FLANN_INDEX_KDTREE, tree = 5)
-    matcher = cv2.FlannBasedMatcher(index_params, search_params)
-
-    ref = "train.jpg"
- 
+    result = []    
+    MIN_MATCH_COUNT = math.ceil(30/(max(largest)/max(payload.shape)))*10 # very relaxed matching at 10 matches minimum
     query_img = payload
-    ref_img = cv2.imread(ref, 0)
-
-    rKP, rDES = detector.detectAndCompute(ref_img, None)        
+    
+    t0 = time.clock()
     qKP, qDES = detector.detectAndCompute(query_img, None)
 
     try:
@@ -83,7 +86,7 @@ def process_img(payload):
             result.append(state)
             result.append(query_img)
         finally:
-            t1 = time.process_time()
+            t1 = time.clock()
             print(state,"Time to process:", t1-t0)
             result.append((t1-t0))
 
@@ -91,7 +94,7 @@ def process_img(payload):
         state = "Not enough matches: object is not in view or is not clear."
         result.append(state)
         result.append(query_img)
-        t1 = time.process_time()
+        t1 = time.clock()
         print(state,"Time to process:", t1-t0)
         result.append((t1-t0))
 
@@ -128,10 +131,7 @@ class testHTTPServer_RequestHandler(BaseHTTPRequestHandler):
         content_length = int(self.headers['Content-Length'])
         content_type = self.headers['Content-type']
         # Gets the data itself. Also, we over-catch by 16 bytes.
-        
-        self.send_response(200)
-        self.close_connection
-        
+                
         if "image" in content_type:
             post_data = self.rfile.read(content_length+16)
 
@@ -162,30 +162,24 @@ class testHTTPServer_RequestHandler(BaseHTTPRequestHandler):
             
             output = 'res.jpg'
             cv2.imwrite(output, final_img[1])
-            
-            #test_payload = {'file' : open('res.jpg','rb')}
-            #rPost = requests.post('http://192.168.43.205:8081', files = test_payload)
-            
-            # Send headers
-            self.send_header('Content-type','text/html')
-            #self.send_header('Content-type','image/jpeg')
-            
+                        
             # Send message back to client
             # Write content as utf-8 data
             print(len(final_img))
             if len(final_img)>3:
                 message = bytes(str(final_img[3])+ "\n" + np.array2string(final_img[2],precision=0,separator=','), "utf8")
                 print(str(message))
-                self.send_header('Content-length',str(len(message)))
-                self.end_headers()
-                
-                self.wfile.write(message)
             else:
                 message = bytes(str(final_img[2])+ "\n" + final_img[0], "utf8")
-                self.send_header('Content-length',str(len(message)))
-                self.end_headers()
                 
-                self.wfile.write(message)
+            # Send response
+            self.send_response(200)
+            # Send headers
+            self.send_header('Content-type','text/html')
+            self.send_header('Content-length',str(len(message)))
+            self.end_headers()
+
+            self.wfile.write(message)
             #self.wfile.write(res.read())
 
         else:
@@ -198,6 +192,7 @@ class testHTTPServer_RequestHandler(BaseHTTPRequestHandler):
             # Write content as utf-8 data
             self.wfile.write(bytes(message, "utf8"))
 
+        self.close_connection
         return
         #client.close()
 
@@ -218,7 +213,6 @@ def run():
 
 
 # In[5]:
-
 
 run()
 
